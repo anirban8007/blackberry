@@ -6,10 +6,14 @@ Run: python3 blackberry.py
 """
 
 import os, sys, time
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
 
-# Load .env from ~/.blackberry/.env
-load_dotenv(os.path.expanduser("~/.blackberry/.env"))
+# Load .env from ~/.blackberry/.env when python-dotenv is installed.
+if load_dotenv:
+    load_dotenv(os.path.expanduser("~/.blackberry/.env"))
 
 import config
 import stt
@@ -66,7 +70,7 @@ def simple_wake_listen() -> bool:
     # Only transcribe if audio has actual content (not silence)
     vol = int(np.abs(audio.astype(np.float32)).mean())
     print(f"[WAKE] Volume: {vol}")
-    if vol < 8000:
+    if vol < config.WAKE_MIN_VOLUME:
         return False
 
     import scipy.io.wavfile as wav
@@ -136,6 +140,9 @@ def main():
 
     # Sanity checks
     if not config.GEMINI_API_KEY:
+        if load_dotenv is None:
+            print("❌ Missing dependency: python-dotenv")
+            print("   Install with: pip install python-dotenv")
         print("❌ GEMINI_API_KEY not set.")
         print(f"   Create file: ~/.blackberry/.env")
         print(f"   Add line:    GEMINI_API_KEY=your_key_here")
