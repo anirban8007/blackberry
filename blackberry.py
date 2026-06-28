@@ -6,17 +6,44 @@ Run: python3 blackberry.py
 """
 
 import os, sys, time
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
 
-# Load .env from ~/.blackberry/.env
-load_dotenv(os.path.expanduser("~/.blackberry/.env"))
+# Load .env from ~/.blackberry/.env when python-dotenv is installed.
+if load_dotenv:
+    load_dotenv(os.path.expanduser("~/.blackberry/.env"))
 
 import config
-import stt
-import llm
-import tts
-import memory
-import actions
+
+stt = None
+llm = None
+tts = None
+memory = None
+actions = None
+
+def _load_runtime_modules():
+    global stt, llm, tts, memory, actions
+    if all([stt, llm, tts, memory, actions]):
+        return
+    try:
+        import stt as _stt
+        import llm as _llm
+        import tts as _tts
+        import memory as _memory
+        import actions as _actions
+    except ModuleNotFoundError as e:
+        pkg = e.name
+        print(f"❌ Missing dependency: {pkg}")
+        print("   Install phase-1 packages with: bash setup.sh")
+        sys.exit(1)
+
+    stt = _stt
+    llm = _llm
+    tts = _tts
+    memory = _memory
+    actions = _actions
 
 # Cache Whisper model — load once, reuse forever
 _wake_whisper = None
@@ -66,7 +93,7 @@ def simple_wake_listen() -> bool:
     # Only transcribe if audio has actual content (not silence)
     vol = int(np.abs(audio.astype(np.float32)).mean())
     print(f"[WAKE] Volume: {vol}")
-    if vol < 8000:
+    if vol < config.WAKE_MIN_VOLUME:
         return False
 
     import scipy.io.wavfile as wav
@@ -134,8 +161,13 @@ def main():
 ╚══════════════════════════════════════╝
     """)
 
+    _load_runtime_modules()
+
     # Sanity checks
     if not config.GEMINI_API_KEY:
+        if load_dotenv is None:
+            print("❌ Missing dependency: python-dotenv")
+            print("   Install with: pip install python-dotenv")
         print("❌ GEMINI_API_KEY not set.")
         print(f"   Create file: ~/.blackberry/.env")
         print(f"   Add line:    GEMINI_API_KEY=your_key_here")
